@@ -1,4 +1,4 @@
-Jade Trading Bot
+# Jade Trading Bot
 
 WIP
 
