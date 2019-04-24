@@ -31,7 +31,7 @@ public class BookTraderLogic {
      */
     HashMap<BookInfo, Double> saleEma = new HashMap<>();
     HashMap<BookInfo, Double> goals = new HashMap<>();
-    HashSet<BookInfo> books = new HashSet<>();
+    ArrayList<BookInfo> books = new ArrayList<>();
 
     private class PriceTimestamp {
         double price;
@@ -138,15 +138,15 @@ public class BookTraderLogic {
      * Utility > MARGIN is best
      * Positive value is OK
      * Value can be used for sorting (e.g. in case we get more offers from sale trader)
-     * @param hisOffer
-     * @param ourOffer
+     * @param heWants
+     * @param weWant
      * @return utility; positive good, negative bad
      */
-    public double acceptTrade(Offer hisOffer, Offer ourOffer) {
-        double hisVal = hisOffer.getMoney();
+    public double acceptTrade(Offer heWants, Offer weWant) {
+        double hisVal = heWants.getMoney();
         //register proposal, compute averages
         for (BookInfo p :
-                hisOffer.getBooks()) {
+                heWants.getBooks()) {
             double price = estimateBookUtility(p, Mode.PESIMISTIC);
             hisVal += price;
             if (saleEma.containsKey(p))
@@ -154,9 +154,9 @@ public class BookTraderLogic {
             saleEma.put(p, price);
         }
 
-        double ourVal = ourOffer.getMoney();
+        double ourVal = weWant.getMoney();
         for (BookInfo p :
-                ourOffer.getBooks()) {
+                weWant.getBooks()) {
             double price = estimateBookUtility(p, Mode.OPTIMISTIC);
             ourVal += price;
             if (purchaseEma.containsKey(p))
@@ -172,13 +172,6 @@ public class BookTraderLogic {
      *
      * @return
      */
-/*
-    musi brat do uvahy co vobec od teba chcu, vyrabas proposal ku cfp
-
-    ideme robit zakazdym len jednu offer?
-
-    DOROBIT, not working, len nacrt
- */
     public ArrayList<Offer> proposeSale(ArrayList<BookInfo> wanted) {
         ArrayList<Offer> offers = new ArrayList<>();
 
@@ -210,29 +203,9 @@ public class BookTraderLogic {
         return offers;
     }
 
-/*
-    EXTREMNE IMPORTANTE!!! my mozme dostat knihy za sale a takisto prist o nejake pri purchase (trade knihu za knihu) - zatial som to mergeol dokopy
-
-    nemali by tieto dve funkcie aj odratavat z nasich penazi? riesime vobec nejako kolko penazi mame?
-
-    chceme aby toto vedelo nieco viac?
- */
-
-    /**
-     * @param sale
-     * @param purchase
-     * @param total    we paid - negative, we received money - positive
-     */
-    public void registerTrade(ArrayList<BookPriceTuple> sale, ArrayList<BookPriceTuple> purchase, double total) {
-        for (BookPriceTuple b :
-                sale) {
-            books.remove(b.book);
-        }
-        for (BookPriceTuple b :
-                purchase) {
-            books.add(b.book);
-        }
-        money += total;
+    void updateLogic(){
+        money = agent.myMoney;
+        books = agent.myBooks;
     }
 
 
