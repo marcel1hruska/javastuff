@@ -4,10 +4,8 @@ import jade.lang.acl.ACLMessage;
 import javastuff.onto.BookInfo;
 import javastuff.onto.Goal;
 import javastuff.onto.Offer;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class BookTraderLogic {
     public final long USE_AVERAGES_AFTER = 10000;//in ms
@@ -32,6 +30,7 @@ public class BookTraderLogic {
     HashMap<BookInfo, Double> saleEma = new HashMap<>();
     HashMap<BookInfo, Double> goals = new HashMap<>();
     ArrayList<BookInfo> books = new ArrayList<>();
+    HashSet<BookInfo> nonGoalBooks = new HashSet<>();
 
     private class PriceTimestamp {
         double price;
@@ -95,11 +94,11 @@ public class BookTraderLogic {
      * Computes value of an offer
      * Do not forget to add price in his offer!!!
      */
-    public double computeOfferValue(Offer o, OfferType type) {
+    private double computeOfferValue(Offer o, OfferType type) {
         double p = 0;
         for (BookInfo b :
                 o.getBooks()) {
-            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESIMISTIC);
+            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESSIMISTIC);
         }
         if (type == OfferType.PURCHASE)
             return p * (1 - MARGIN);
@@ -158,7 +157,7 @@ public class BookTraderLogic {
         double ourVal = weWant.getMoney();
         for (BookInfo p :
                 weWant.getBooks()) {
-            double price = estimateBookUtility(p, Mode.PESIMISTIC);
+            double price = estimateBookUtility(p, Mode.PESSIMISTIC);
             ourVal += price;
             if (purchaseEma.containsKey(p))
                 price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
@@ -194,7 +193,7 @@ public class BookTraderLogic {
             if (Math.random() < 0.5)
                 continue;
             bs.add(b);
-            p -= estimateBookUtility(b, Mode.PESIMISTIC);
+            p -= estimateBookUtility(b, Mode.PESSIMISTIC);
         }
         o.setBooks(bs);
         if (p > 0)
@@ -207,12 +206,21 @@ public class BookTraderLogic {
     void updateLogic() {
         money = agent.myMoney;
         books = agent.myBooks;
+
+        nonGoalBooks.clear();
+        HashSet<BookInfo> goals = new HashSet<>(this.goals.keySet());
+        for(BookInfo b : books){
+            if(goals.contains(b))
+                goals.remove(b);
+            else
+                nonGoalBooks.add(b);
+        }
     }
 
 
     enum Mode {
         OPTIMISTIC,
-        PESIMISTIC
+        PESSIMISTIC
     }
 
     /**
@@ -223,7 +231,7 @@ public class BookTraderLogic {
      * @return utility
      */
     private double estimateBookUtility(BookInfo id, Mode mode) {
-        if (goals.containsKey(id))
+        if (goals.containsKey(id) && !nonGoalBooks.contains(id))
             return goals.get(id);
 
         if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS)
@@ -233,9 +241,9 @@ public class BookTraderLogic {
             if (saleEma.containsKey(id))
                 return saleEma.get(id);
             else
-                return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
+                return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
         } else
-            return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
+            return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
     }
 
 }
