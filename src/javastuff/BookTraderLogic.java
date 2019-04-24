@@ -138,6 +138,7 @@ public class BookTraderLogic {
      * Utility > MARGIN is best
      * Positive value is OK
      * Value can be used for sorting (e.g. in case we get more offers from sale trader)
+     *
      * @param heWants
      * @param weWant
      * @return utility; positive good, negative bad
@@ -147,7 +148,7 @@ public class BookTraderLogic {
         //register proposal, compute averages
         for (BookInfo p :
                 heWants.getBooks()) {
-            double price = estimateBookUtility(p, Mode.PESIMISTIC);
+            double price = estimateBookUtility(p, Mode.OPTIMISTIC);
             hisVal += price;
             if (saleEma.containsKey(p))
                 price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
@@ -157,14 +158,14 @@ public class BookTraderLogic {
         double ourVal = weWant.getMoney();
         for (BookInfo p :
                 weWant.getBooks()) {
-            double price = estimateBookUtility(p, Mode.OPTIMISTIC);
+            double price = estimateBookUtility(p, Mode.PESIMISTIC);
             ourVal += price;
             if (purchaseEma.containsKey(p))
                 price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
             purchaseEma.put(p, price);
         }
 
-        return hisVal / ourVal;
+        return ourVal / hisVal;
     }
 
     /**
@@ -203,13 +204,13 @@ public class BookTraderLogic {
         return offers;
     }
 
-    void updateLogic(){
+    void updateLogic() {
         money = agent.myMoney;
         books = agent.myBooks;
     }
 
 
-    enum Mode{
+    enum Mode {
         OPTIMISTIC,
         PESIMISTIC
     }
