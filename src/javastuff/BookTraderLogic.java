@@ -4,11 +4,9 @@ import jade.lang.acl.ACLMessage;
 import javastuff.onto.BookInfo;
 import javastuff.onto.Goal;
 import javastuff.onto.Offer;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class BookTraderLogic {
@@ -23,6 +21,7 @@ public class BookTraderLogic {
 
     double minBookPrice;
     double maxBookPrice;
+    double money;
     /**
      * Purchase proposals we get / exponential moving average
      */
@@ -75,6 +74,7 @@ public class BookTraderLogic {
 
         goals.clear();
         books.clear();
+        money = agent.myMoney;
 
         for (Goal g : agent.myGoal)
             goals.put(g.getBook(), g.getValue());
@@ -86,16 +86,25 @@ public class BookTraderLogic {
         maxBookPrice = goals.values().stream().max(Double::compareTo).get();
     }
 
+    enum OfferType {
+        PURCHASE,
+        SALE
+    }
+
     /**
      * Computes value of an offer
-     *
+     * Do not forget to add price in his offer!!!
      */
-/*
-    dorobit
- */
-    public double computeOfferValue(Offer o)
-    {
-        return 0.0;
+    public double computeOfferValue(Offer o, OfferType type) {
+        double p = 0;
+        for (BookInfo b :
+                o.getBooks()) {
+            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESIMISTIC);
+        }
+        if (type == OfferType.PURCHASE)
+            return p * (1 - MARGIN);
+        else
+            return p * (1 + MARGIN);
     }
 
     /**
@@ -105,6 +114,7 @@ public class BookTraderLogic {
      */
 /*
     cena teraz nerobi nic, chceme aby nieco robila?
+    A: vieme si presne pocitat, kolko mame penazu?
  */
     public ArrayList<BookPriceTuple> proposePurchase() {
         ArrayList<BookPriceTuple> proposal = new ArrayList<>();
@@ -113,7 +123,7 @@ public class BookTraderLogic {
                 double p = saleEma.get(b) * (1 - MARGIN);
                 if (purchaseEma.containsKey(b))
                     p = Math.min(p, purchaseEma.get(b));
-                proposal.add(new BookPriceTuple(b,p));
+                proposal.add(new BookPriceTuple(b, p));
             }
 
         for (BookInfo b : goals.keySet()) {
@@ -123,51 +133,38 @@ public class BookTraderLogic {
         return proposal;
     }
 
-/*
-    ani len netusim kde pouzit tieto accept funkcie :D
- */
     /**
-     * Filters out proposals
-     *
-     * @param proposal
-     * @return
+     * Computes utility of trade
+     * Utility > MARGIN is best
+     * Positive value is OK
+     * Value can be used for sorting (e.g. in case we get more offers from sale trader)
+     * @param hisOffer
+     * @param ourOffer
+     * @return utility; positive good, negative bad
      */
-    public List<BookPriceTuple> acceptPurchase(ArrayList<BookPriceTuple> proposal) {
+    public double acceptTrade(Offer hisOffer, Offer ourOffer) {
+        double hisVal = hisOffer.getMoney();
         //register proposal, compute averages
-        for (BookPriceTuple p :
-                proposal) {
-            double price = p.price;
-            if (purchaseEma.containsKey(p.book))
-                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p.book);
-            purchaseEma.put(p.book, price);
+        for (BookInfo p :
+                hisOffer.getBooks()) {
+            double price = estimateBookUtility(p, Mode.PESIMISTIC);
+            hisVal += price;
+            if (saleEma.containsKey(p))
+                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
+            saleEma.put(p, price);
         }
 
-        //filter items
-        return proposal.stream()
-                .filter(p -> p.price <= estimateBookUtility(p.book))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Filters out proposals
-     *
-     * @param proposal
-     * @return
-     */
-    public List<BookPriceTuple> acceptSale(ArrayList<BookPriceTuple> proposal) {
-        //register proposal, compute averages
-        for (BookPriceTuple p :
-                proposal) {
-            double price = p.price;
-            if (saleEma.containsKey(p.book))
-                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p.book);
-            saleEma.put(p.book, price);
+        double ourVal = ourOffer.getMoney();
+        for (BookInfo p :
+                ourOffer.getBooks()) {
+            double price = estimateBookUtility(p, Mode.OPTIMISTIC);
+            ourVal += price;
+            if (purchaseEma.containsKey(p))
+                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
+            purchaseEma.put(p, price);
         }
 
-        //filter items
-        return proposal.stream()
-                .filter(p -> p.price > estimateBookUtility(p.book))
-                .collect(Collectors.toList());
+        return hisVal / ourVal;
     }
 
     /**
@@ -183,30 +180,33 @@ public class BookTraderLogic {
     DOROBIT, not working, len nacrt
  */
     public ArrayList<Offer> proposeSale(ArrayList<BookInfo> wanted) {
-        ArrayList<BookPriceTuple> proposal = new ArrayList<>();
-
-        for (BookInfo b : books) {
-            double p = purchaseEma.get(b) * (1 + MARGIN);
-            if (goals.containsKey(b))
-                p = Math.max(p, goals.get(b) * (1 + MARGIN));
-
-            if (saleEma.containsKey(b))
-                p = Math.min(p, saleEma.get(b));
-
-            if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS)
-                if (!goals.containsKey(b))
-                    p = (TRADING_DURATION - System.currentTimeMillis() + time) * p / TRADING_DURATION;
-
-
-            proposal.add(new BookPriceTuple(b, p));
-        }
-        /*
-        o.setBooks(bis);
-        o.setMoney(20);
-         */
-        Offer o = new Offer();
         ArrayList<Offer> offers = new ArrayList<>();
+
+        //vsetko za peniaze
+        Offer o = new Offer();
+        o.setBooks(wanted);
+        o.setMoney(computeOfferValue(o, OfferType.SALE));
+        o.setBooks(new ArrayList<>());
         offers.add(o);
+
+        //vsetko za knihy + peniaze
+        o = new Offer();
+        o.setBooks(wanted);
+        double p = computeOfferValue(o, OfferType.SALE);
+        ArrayList<BookInfo> bs = new ArrayList<>();
+        for (BookInfo b : saleEma.keySet()) {
+            if (p < 0)
+                break;
+            if (Math.random() < 0.5)
+                continue;
+            bs.add(b);
+            p -= estimateBookUtility(b, Mode.PESIMISTIC);
+        }
+        o.setBooks(bs);
+        if (p > 0)
+            o.setMoney(p);
+        offers.add(o);
+
         return offers;
     }
 
@@ -217,7 +217,13 @@ public class BookTraderLogic {
 
     chceme aby toto vedelo nieco viac?
  */
-    public void registerTrade(ArrayList<BookPriceTuple> sale,ArrayList<BookPriceTuple> purchase){
+
+    /**
+     * @param sale
+     * @param purchase
+     * @param total    we paid - negative, we received money - positive
+     */
+    public void registerTrade(ArrayList<BookPriceTuple> sale, ArrayList<BookPriceTuple> purchase, double total) {
         for (BookPriceTuple b :
                 sale) {
             books.remove(b.book);
@@ -226,15 +232,23 @@ public class BookTraderLogic {
                 purchase) {
             books.add(b.book);
         }
+        money += total;
+    }
+
+
+    enum Mode{
+        OPTIMISTIC,
+        PESIMISTIC
     }
 
     /**
      * Estimates utility for the book
      *
      * @param id
+     * @param mode
      * @return utility
      */
-    private double estimateBookUtility(BookInfo id) {
+    private double estimateBookUtility(BookInfo id, Mode mode) {
         if (goals.containsKey(id))
             return goals.get(id);
 
@@ -245,9 +259,9 @@ public class BookTraderLogic {
             if (saleEma.containsKey(id))
                 return saleEma.get(id);
             else
-                return minBookPrice;
+                return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
         } else
-            return minBookPrice;
+            return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
     }
 
 }
