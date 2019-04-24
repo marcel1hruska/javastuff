@@ -16,5 +16,5 @@ sourceSets{main{java{srcDir 'src'}}}
 
 mainClassName = 'jade.Boot'
 run {
-   args = ['-gui']
+   args = ['-gui', '-agents','t1:javastuff.BookTrader;t2:javastuff.BookTrader;t3:javastuff.BookTrader;t4:javastuff.BookTrader;t5:javastuff.BookTrader;env:javastuff.Environment']
 }

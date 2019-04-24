@@ -194,17 +194,10 @@ public class BookTrader extends Agent {
 
                     ArrayList<BookInfo> bis = new ArrayList<BookInfo>();
 
-/*
-    tu velmi pravdepodobne interface ostava tak ako je teraz
- */
-                    ArrayList<BookTraderLogic.BookPriceTuple> proposedBooks = logic.proposePurchase();
-                    for (BookTraderLogic.BookPriceTuple g : proposedBooks)
-                    {
-                        bis.add(g.book);
-                    }
-
+                    //create proposals
+                    ArrayList<BookInfo> proposedBooks = logic.proposePurchase();
                     SellMeBooks smb = new SellMeBooks();
-                    smb.setBooks(bis);
+                    smb.setBooks(proposedBooks);
 
                     getContentManager().fillContent(buyBook, new Action(myAgent.getAID(), smb));
                     addBehaviour(new ObtainBook(myAgent, buyBook));
@@ -271,22 +264,8 @@ public class BookTrader extends Agent {
                     getContentManager().fillContent(transReq, new Action(envs[0].getName(), mt));
                     addBehaviour(new SendBook(myAgent, transReq));
 
-/*
-    asi tu chceme zaregistrovat purchase (co ked ju environment odmietne?)
-
-    aktualne davam celu cenu nakupu ku kazdej knihe, mozno na to bude treba upravit interface
- */
-                    ArrayList<BookTraderLogic.BookPriceTuple> soldBooks = new ArrayList<>();
-                    ArrayList<BookTraderLogic.BookPriceTuple> receivedBooks = new ArrayList<>();
-                    for (BookInfo b : c.getOffer().getBooks())
-                    {
-                        soldBooks.add(logic.new BookPriceTuple(b,c.getOffer().getMoney()));
-                    }
-                    for (BookInfo b : shouldReceive)
-                    {
-                        receivedBooks.add(logic.new BookPriceTuple(b,0));
-                    }
-                    logic.registerTrade(soldBooks,receivedBooks);
+                    //update logic variables on purchase
+                    logic.updateLogic();
 
                 } catch (UngroundedException e) {
                     e.printStackTrace();
@@ -301,6 +280,8 @@ public class BookTrader extends Agent {
             }
 
             //process the offers from the sellers
+            //iterate through all reponses and all their offers
+            //choose the best offer and accept its proposal
             @Override
             protected void handleAllResponses(Vector responses, Vector acceptances) {
 
@@ -322,16 +303,12 @@ public class BookTrader extends Agent {
 
                     ChooseFrom cf = (ChooseFrom) ce;
 
-                    ArrayList<Offer> offers = cf.getOffers();
-/*
-    chceme nieco obdobne ale
-    -chceme prejst vsetky proposals, tie co nie sme vobec schopny splnit (vsetky offers v dancom proposal su pre nas nemozne) rovno zamietneme
-    -sme schopni prijat proposal len od jedneho cloveka (co nam to ulahcuje)
-    -pre kazdy proposal, ktory sme nezamietli chceme vytvorit nejaku jeho cenu/uzitok a.k.a. najst najlepsiu offeru
-    -vybereme najlepsi proposal a ten prijmeme
+                    Offer weWant = new Offer();
+                    weWant.setBooks(cf.getWillSell());
+                    weWant.setMoney(0.0);
 
-    kroky spomenute hore som zkodil, len by bolo zauvazovat ci to naozaj tak chceme
-*/
+                    ArrayList<Offer> offers = cf.getOffers();
+
                     //find out which offers we can fulfill (we have all requested books and enough money)
                     ArrayList<BookTraderLogic.OfferInfo> canFulfill = new ArrayList<>();
                     for (Offer o : offers) {
@@ -358,7 +335,10 @@ public class BookTrader extends Agent {
 
                         if (foundAll) {
                             //compute offers value
-                            canFulfill.add(logic.new OfferInfo(o,logic.computeOfferValue(o),response));
+                            double value = logic.acceptTrade(o,weWant);
+                            //we can fulfill either way but we dont want to
+                            if ( value > 0)
+                                canFulfill.add(logic.new OfferInfo(o,value,response));
                         }
                     }
 
@@ -368,10 +348,11 @@ public class BookTrader extends Agent {
                         acc.setPerformative(ACLMessage.REJECT_PROPOSAL);
                         acceptances.add(acc);
                     }
-                    //else compute the proposals value
+                    //there are some possible offers, find the best
                     else {
                         //find the best offer from this proposal
                         BookTraderLogic.OfferInfo max = canFulfill.stream().max(Comparator.comparing((BookTraderLogic.OfferInfo x) -> x.value)).get();
+
                         //the first one
                         if (currentBest == null) {
                             currentBest = max;
@@ -445,8 +426,10 @@ public class BookTrader extends Agent {
 
                     SellMeBooks smb = (SellMeBooks)ac.getAction();
                     ArrayList<BookInfo> books = smb.getBooks();
-
                     ArrayList<BookInfo> sellBooks = new ArrayList<BookInfo>();
+
+                    if (books == null)
+                        throw new RefuseException("");
 
                     //find out, if we have books the agent wants
                     for (int i = 0; i < books.size(); i++) {
@@ -461,13 +444,7 @@ public class BookTrader extends Agent {
                         if (!found)
                             throw new RefuseException("");
                     }
-/*
-    jednoducho integrovany proposeSale, ktory ale treba hodne este premysliet
 
-    proposeSale by mal dostat zoznam knih o ktore je zaujem a vyrobit zoznam offier na ne
-
-    podla vsetketho si mozme vybrat na ktore knihy z cfp urobime offer, sellBooks je zoznam vsetkych knih ktore sme z cfp schopni predat
- */
                     ArrayList<Offer> proposedSale = logic.proposeSale(sellBooks);
 
                     ChooseFrom cf = new ChooseFrom();
@@ -539,17 +516,8 @@ public class BookTrader extends Agent {
 
                     addBehaviour(new SendBook(myAgent, transReq));
 
-                    ArrayList<BookTraderLogic.BookPriceTuple> soldBooks = new ArrayList<>();
-                    ArrayList<BookTraderLogic.BookPriceTuple> receivedBooks = new ArrayList<>();
-                    for (BookInfo b : c.getOffer().getBooks())
-                    {
-                        receivedBooks.add(logic.new BookPriceTuple(b,c.getOffer().getMoney()));
-                    }
-                    for (BookInfo b : cf.getWillSell())
-                    {
-                        soldBooks.add(logic.new BookPriceTuple(b,0));
-                    }
-                    logic.registerTrade(soldBooks,receivedBooks);
+                    //update logic variables on sale
+                    logic.updateLogic();
 
                     ACLMessage reply = accept.createReply();
                     reply.setPerformative(ACLMessage.INFORM);

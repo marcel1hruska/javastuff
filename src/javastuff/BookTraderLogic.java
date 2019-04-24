@@ -4,10 +4,8 @@ import jade.lang.acl.ACLMessage;
 import javastuff.onto.BookInfo;
 import javastuff.onto.Goal;
 import javastuff.onto.Offer;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class BookTraderLogic {
     public final long USE_AVERAGES_AFTER = 10000;//in ms
@@ -95,11 +93,11 @@ public class BookTraderLogic {
      * Computes value of an offer
      * Do not forget to add price in his offer!!!
      */
-    public double computeOfferValue(Offer o, OfferType type) {
+    private double computeOfferValue(Offer o, OfferType type) {
         double p = 0;
         for (BookInfo b :
                 o.getBooks()) {
-            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESIMISTIC);
+            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESSIMISTIC);
         }
         if (type == OfferType.PURCHASE)
             return p * (1 - MARGIN);
@@ -108,16 +106,19 @@ public class BookTraderLogic {
     }
 
     /**
-     * Proposes books and prices for purchase
+     * Proposes books
      *
      * @return
      */
 /*
-    cena teraz nerobi nic, chceme aby nieco robila?
-    A: vieme si presne pocitat, kolko mame penazu?
+    tato funkcia ma vyrabat tuple knih, ktore chceme, ceny su nam predpokladam naprd
  */
-    public ArrayList<BookPriceTuple> proposePurchase() {
-        ArrayList<BookPriceTuple> proposal = new ArrayList<>();
+    private int proposedIndex = 0;
+
+    public ArrayList<BookInfo> proposePurchase() {
+        ArrayList<BookInfo> proposal = new ArrayList<>();
+
+        /*
         if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS)
             for (BookInfo b : saleEma.keySet()) {
                 double p = saleEma.get(b) * (1 - MARGIN);
@@ -125,9 +126,19 @@ public class BookTraderLogic {
                     p = Math.min(p, purchaseEma.get(b));
                 proposal.add(new BookPriceTuple(b, p));
             }
-
+        */
+        if (proposedIndex >= goals.keySet().size())
+            proposedIndex = 0;
+        int i = 0;
         for (BookInfo b : goals.keySet()) {
-            proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
+            //proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
+            if (i == proposedIndex)
+            {
+                proposal.add(b);
+                proposedIndex++;
+                break;
+            }
+            i++;
         }
 
         return proposal;
@@ -146,23 +157,29 @@ public class BookTraderLogic {
     public double acceptTrade(Offer heWants, Offer weWant) {
         double hisVal = heWants.getMoney();
         //register proposal, compute averages
-        for (BookInfo p :
-                heWants.getBooks()) {
-            double price = estimateBookUtility(p, Mode.OPTIMISTIC);
-            hisVal += price;
-            if (saleEma.containsKey(p))
-                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
-            saleEma.put(p, price);
+        if (heWants.getBooks() != null)
+        {
+            for (BookInfo p :
+                    heWants.getBooks()) {
+                double price = estimateBookUtility(p, Mode.OPTIMISTIC);
+                hisVal += price;
+                if (saleEma.containsKey(p))
+                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
+                saleEma.put(p, price);
+            }
         }
 
         double ourVal = weWant.getMoney();
-        for (BookInfo p :
-                weWant.getBooks()) {
-            double price = estimateBookUtility(p, Mode.PESIMISTIC);
-            ourVal += price;
-            if (purchaseEma.containsKey(p))
-                price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
-            purchaseEma.put(p, price);
+        if (weWant.getBooks() != null)
+        {
+            for (BookInfo p :
+                    weWant.getBooks()) {
+                double price = estimateBookUtility(p, Mode.PESSIMISTIC);
+                ourVal += price;
+                if (purchaseEma.containsKey(p))
+                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
+                purchaseEma.put(p, price);
+            }
         }
 
         return ourVal / hisVal;
@@ -194,7 +211,7 @@ public class BookTraderLogic {
             if (Math.random() < 0.5)
                 continue;
             bs.add(b);
-            p -= estimateBookUtility(b, Mode.PESIMISTIC);
+            p -= estimateBookUtility(b, Mode.PESSIMISTIC);
         }
         o.setBooks(bs);
         if (p > 0)
@@ -212,7 +229,7 @@ public class BookTraderLogic {
 
     enum Mode {
         OPTIMISTIC,
-        PESIMISTIC
+        PESSIMISTIC
     }
 
     /**
@@ -233,9 +250,9 @@ public class BookTraderLogic {
             if (saleEma.containsKey(id))
                 return saleEma.get(id);
             else
-                return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
+                return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
         } else
-            return mode == Mode.PESIMISTIC ? minBookPrice : maxBookPrice;
+            return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
     }
 
 }
