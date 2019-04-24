@@ -1,7 +1,9 @@
 package javastuff;
 
+import jade.lang.acl.ACLMessage;
 import javastuff.onto.BookInfo;
 import javastuff.onto.Goal;
+import javastuff.onto.Offer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,13 +26,13 @@ public class BookTraderLogic {
     /**
      * Purchase proposals we get / exponential moving average
      */
-    HashMap<Integer, Double> purchaseEma = new HashMap<>();
+    HashMap<BookInfo, Double> purchaseEma = new HashMap<>();
     /**
      * Sale proposals / exponential moving average
      */
-    HashMap<Integer, Double> saleEma = new HashMap<>();
-    HashMap<Integer, Double> goals = new HashMap<>();
-    HashSet<Integer> books = new HashSet<>();
+    HashMap<BookInfo, Double> saleEma = new HashMap<>();
+    HashMap<BookInfo, Double> goals = new HashMap<>();
+    HashSet<BookInfo> books = new HashSet<>();
 
     private class PriceTimestamp {
         double price;
@@ -43,12 +45,24 @@ public class BookTraderLogic {
     }
 
     public class BookPriceTuple {
-        public int book;
+        public BookInfo book;
         public double price;
 
-        public BookPriceTuple(int id, double price) {
-            this.book = id;
+        public BookPriceTuple(BookInfo book, double price) {
+            this.book = book;
             this.price = price;
+        }
+    }
+
+    public class OfferInfo {
+        public Offer offer;
+        public double value;
+        public ACLMessage response;
+
+        public OfferInfo(Offer offer, double value, ACLMessage response) {
+            this.offer = offer;
+            this.value = value;
+            this.response = response;
         }
     }
 
@@ -63,13 +77,25 @@ public class BookTraderLogic {
         books.clear();
 
         for (Goal g : agent.myGoal)
-            goals.put(g.getBook().getBookID(), g.getValue());
+            goals.put(g.getBook(), g.getValue());
 
         for (BookInfo b : agent.myBooks)
-            books.add(b.getBookID());
+            books.add(b);
 
         minBookPrice = goals.values().stream().min(Double::compareTo).get();
         maxBookPrice = goals.values().stream().max(Double::compareTo).get();
+    }
+
+    /**
+     * Computes value of an offer
+     *
+     */
+/*
+    dorobit
+ */
+    public double computeOfferValue(Offer o)
+    {
+        return 0.0;
     }
 
     /**
@@ -77,24 +103,29 @@ public class BookTraderLogic {
      *
      * @return
      */
+/*
+    cena teraz nerobi nic, chceme aby nieco robila?
+ */
     public ArrayList<BookPriceTuple> proposePurchase() {
         ArrayList<BookPriceTuple> proposal = new ArrayList<>();
-
         if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS)
-            for (Integer b : saleEma.keySet()) {
+            for (BookInfo b : saleEma.keySet()) {
                 double p = saleEma.get(b) * (1 - MARGIN);
                 if (purchaseEma.containsKey(b))
                     p = Math.min(p, purchaseEma.get(b));
-                proposal.add(new BookPriceTuple(b, p));
+                proposal.add(new BookPriceTuple(b,p));
             }
 
-        for (Integer b : goals.keySet()) {
+        for (BookInfo b : goals.keySet()) {
             proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
         }
 
         return proposal;
     }
 
+/*
+    ani len netusim kde pouzit tieto accept funkcie :D
+ */
     /**
      * Filters out proposals
      *
@@ -144,10 +175,17 @@ public class BookTraderLogic {
      *
      * @return
      */
-    public ArrayList<BookPriceTuple> proposeSale() {
+/*
+    musi brat do uvahy co vobec od teba chcu, vyrabas proposal ku cfp
+
+    ideme robit zakazdym len jednu offer?
+
+    DOROBIT, not working, len nacrt
+ */
+    public ArrayList<Offer> proposeSale(ArrayList<BookInfo> wanted) {
         ArrayList<BookPriceTuple> proposal = new ArrayList<>();
 
-        for (Integer b : books) {
+        for (BookInfo b : books) {
             double p = purchaseEma.get(b) * (1 + MARGIN);
             if (goals.containsKey(b))
                 p = Math.max(p, goals.get(b) * (1 + MARGIN));
@@ -159,20 +197,31 @@ public class BookTraderLogic {
                 if (!goals.containsKey(b))
                     p = (TRADING_DURATION - System.currentTimeMillis() + time) * p / TRADING_DURATION;
 
+
             proposal.add(new BookPriceTuple(b, p));
         }
-
-        return proposal;
+        /*
+        o.setBooks(bis);
+        o.setMoney(20);
+         */
+        Offer o = new Offer();
+        ArrayList<Offer> offers = new ArrayList<>();
+        offers.add(o);
+        return offers;
     }
 
-    public void registerSale(ArrayList<BookPriceTuple> sale){
+/*
+    EXTREMNE IMPORTANTE!!! my mozme dostat knihy za sale a takisto prist o nejake pri purchase (trade knihu za knihu) - zatial som to mergeol dokopy
+
+    nemali by tieto dve funkcie aj odratavat z nasich penazi? riesime vobec nejako kolko penazi mame?
+
+    chceme aby toto vedelo nieco viac?
+ */
+    public void registerTrade(ArrayList<BookPriceTuple> sale,ArrayList<BookPriceTuple> purchase){
         for (BookPriceTuple b :
                 sale) {
             books.remove(b.book);
         }
-    }
-
-    public void registerPurchase(ArrayList<BookPriceTuple> purchase){
         for (BookPriceTuple b :
                 purchase) {
             books.add(b.book);
@@ -185,7 +234,7 @@ public class BookTraderLogic {
      * @param id
      * @return utility
      */
-    private double estimateBookUtility(int id) {
+    private double estimateBookUtility(BookInfo id) {
         if (goals.containsKey(id))
             return goals.get(id);
 

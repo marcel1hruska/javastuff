@@ -34,4 +34,29 @@ public class BookInfo implements Concept {
         return "[" + bookName + "," + bookID + "]";
     }
 
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((bookName == null) ? 0 : bookName.hashCode());
+        result = prime * result + bookID;
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        BookInfo other = (BookInfo) obj;
+        if (bookName == null) {
+            if (other.bookName != null)
+                return false;
+        } else if (!bookName.equals(other.bookName))
+            return false;
+        return bookID == other.bookID;
+    }
 }

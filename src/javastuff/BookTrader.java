@@ -1,5 +1,7 @@
 package javastuff;
 
+import javafx.util.Pair;
+import javastuff.BookTraderLogic;
 import javastuff.onto.*;
 import jade.content.ContentElement;
 import jade.content.lang.Codec;
@@ -39,7 +41,8 @@ public class BookTrader extends Agent {
     ArrayList<Goal> myGoal;
     double myMoney;
 
-    Random rnd = new Random();
+    //logic of the book trader
+    BookTraderLogic logic = new BookTraderLogic(this);
 
     @Override
     protected void setup() {
@@ -128,6 +131,9 @@ public class BookTrader extends Agent {
                     myGoal = ai.getGoals();
                     myMoney = ai.getMoney();
 
+                    //start the logic
+                    logic.startTrading();
+
                     //add a behavior which tries to buy a book every two seconds
                     addBehaviour(new TradingBehaviour(myAgent, 2000));
 
@@ -189,18 +195,13 @@ public class BookTrader extends Agent {
                     ArrayList<BookInfo> bis = new ArrayList<BookInfo>();
 
 /*
-TO DO
-TO DO
-TO DO
+    tu velmi pravdepodobne interface ostava tak ako je teraz
  */
-                    //choose a book from goals to buy
-                    BookInfo bi = new BookInfo();
-                    bi.setBookName(myGoal.get(rnd.nextInt(myGoal.size())).getBook().getBookName());
-                    bis.add(bi);
-                    /*
-
-                     */
-
+                    ArrayList<BookTraderLogic.BookPriceTuple> proposedBooks = logic.proposePurchase();
+                    for (BookTraderLogic.BookPriceTuple g : proposedBooks)
+                    {
+                        bis.add(g.book);
+                    }
 
                     SellMeBooks smb = new SellMeBooks();
                     smb.setBooks(bis);
@@ -217,7 +218,6 @@ TO DO
 
             }
         }
-
 
         //this behavior takes care of the buying of the book itself
         class ObtainBook extends ContractNetInitiator {
@@ -271,6 +271,23 @@ TO DO
                     getContentManager().fillContent(transReq, new Action(envs[0].getName(), mt));
                     addBehaviour(new SendBook(myAgent, transReq));
 
+/*
+    asi tu chceme zaregistrovat purchase (co ked ju environment odmietne?)
+
+    aktualne davam celu cenu nakupu ku kazdej knihe, mozno na to bude treba upravit interface
+ */
+                    ArrayList<BookTraderLogic.BookPriceTuple> soldBooks = new ArrayList<>();
+                    ArrayList<BookTraderLogic.BookPriceTuple> receivedBooks = new ArrayList<>();
+                    for (BookInfo b : c.getOffer().getBooks())
+                    {
+                        soldBooks.add(logic.new BookPriceTuple(b,c.getOffer().getMoney()));
+                    }
+                    for (BookInfo b : shouldReceive)
+                    {
+                        receivedBooks.add(logic.new BookPriceTuple(b,0));
+                    }
+                    logic.registerTrade(soldBooks,receivedBooks);
+
                 } catch (UngroundedException e) {
                     e.printStackTrace();
                 } catch (OntologyException e) {
@@ -289,89 +306,114 @@ TO DO
 
                 Iterator it = responses.iterator();
 
-                //we need to accept only one offer, otherwise we create two transactions with the same ID
-                boolean accepted = false;
+                BookTraderLogic.OfferInfo currentBest = null;
+
+                try {
                 while (it.hasNext()) {
-                    ACLMessage response = (ACLMessage)it.next();
+                    ACLMessage response = (ACLMessage) it.next();
 
                     ContentElement ce = null;
-                    try {
-                        if (response.getPerformative() == ACLMessage.REFUSE) {
-                            continue;
-                        }
 
-                        ce = getContentManager().extractContent(response);
+                    if (response.getPerformative() == ACLMessage.REFUSE) {
+                        continue;
+                    }
 
-                        ChooseFrom cf = (ChooseFrom)ce;
+                    ce = getContentManager().extractContent(response);
 
-                        ArrayList<Offer> offers = cf.getOffers();
+                    ChooseFrom cf = (ChooseFrom) ce;
 
-                        //find out which offers we can fulfill (we have all requested books and enough money)
+                    ArrayList<Offer> offers = cf.getOffers();
 /*
-TO DO
-TO DO
-TO DO
- */
-                        ArrayList<Offer> canFulfill = new ArrayList<Offer>();
-                        for (Offer o: offers) {
-                            if (o.getMoney() > myMoney)
-                                continue;
+    chceme nieco obdobne ale
+    -chceme prejst vsetky proposals, tie co nie sme vobec schopny splnit (vsetky offers v dancom proposal su pre nas nemozne) rovno zamietneme
+    -sme schopni prijat proposal len od jedneho cloveka (co nam to ulahcuje)
+    -pre kazdy proposal, ktory sme nezamietli chceme vytvorit nejaku jeho cenu/uzitok a.k.a. najst najlepsiu offeru
+    -vybereme najlepsi proposal a ten prijmeme
 
-                            boolean foundAll = true;
-                            if (o.getBooks() != null)
-                                for (BookInfo bi : o.getBooks()) {
-                                    String bn = bi.getBookName();
-                                    boolean found = false;
-                                    for (int j = 0; j < myBooks.size(); j++) {
-                                        if (myBooks.get(j).getBookName().equals(bn)) {
-                                            found = true;
-                                            bi.setBookID(myBooks.get(j).getBookID());
-                                            break;
-                                        }
-                                    }
-                                    if (!found) {
-                                        foundAll = false;
+    kroky spomenute hore som zkodil, len by bolo zauvazovat ci to naozaj tak chceme
+*/
+                    //find out which offers we can fulfill (we have all requested books and enough money)
+                    ArrayList<BookTraderLogic.OfferInfo> canFulfill = new ArrayList<>();
+                    for (Offer o : offers) {
+                        if (o.getMoney() > myMoney)
+                            continue;
+
+                        boolean foundAll = true;
+                        if (o.getBooks() != null)
+                            for (BookInfo bi : o.getBooks()) {
+                                String bn = bi.getBookName();
+                                boolean found = false;
+                                for (int j = 0; j < myBooks.size(); j++) {
+                                    if (myBooks.get(j).getBookName().equals(bn)) {
+                                        found = true;
+                                        bi.setBookID(myBooks.get(j).getBookID());
                                         break;
                                     }
                                 }
-
-                            if (foundAll) {
-                                canFulfill.add(o);
+                                if (!found) {
+                                    foundAll = false;
+                                    break;
+                                }
                             }
-                        }
 
-                        //if none, we REJECT the proposal, we also reject all proposal if we already accepted one
-                        if (canFulfill.size() == 0 || accepted) {
+                        if (foundAll) {
+                            //compute offers value
+                            canFulfill.add(logic.new OfferInfo(o,logic.computeOfferValue(o),response));
+                        }
+                    }
+
+                    //if none, we REJECT the proposal
+                    if (canFulfill.size() == 0) {
+                        ACLMessage acc = response.createReply();
+                        acc.setPerformative(ACLMessage.REJECT_PROPOSAL);
+                        acceptances.add(acc);
+                    }
+                    //else compute the proposals value
+                    else {
+                        //find the best offer from this proposal
+                        BookTraderLogic.OfferInfo max = canFulfill.stream().max(Comparator.comparing((BookTraderLogic.OfferInfo x) -> x.value)).get();
+                        //the first one
+                        if (currentBest == null) {
+                            currentBest = max;
+                        }
+                        //we found better, reject the former and save the better
+                        else if (max.value > currentBest.value) {
+                            ACLMessage acc = currentBest.response.createReply();
+                            acc.setPerformative(ACLMessage.REJECT_PROPOSAL);
+                            acceptances.add(acc);
+
+                            currentBest = max;
+                        }
+                        //not better, only reject
+                        else {
                             ACLMessage acc = response.createReply();
                             acc.setPerformative(ACLMessage.REJECT_PROPOSAL);
                             acceptances.add(acc);
-                            continue;
                         }
-
-                        ACLMessage acc = response.createReply();
-                        acc.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
-                        accepted = true;
-
-                        //choose an offer
-                        Chosen ch = new Chosen();
-                        ch.setOffer(canFulfill.get(rnd.nextInt(canFulfill.size())));
-
-                        c=ch;
-                        shouldReceive = cf.getWillSell();
-                        /*
-
-                         */
-                        getContentManager().fillContent(acc, ch);
-                        acceptances.add(acc);
-
-                    } catch (Codec.CodecException e) {
-                        e.printStackTrace();
-                    } catch (OntologyException e) {
-                        e.printStackTrace();
                     }
+                }
+                if (currentBest != null)
+                {
+                    //we accept the best one
+                    ACLMessage acc = currentBest.response.createReply();
+                    acc.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+
+                    //choose an offer
+                    Chosen ch = new Chosen();
+                    ch.setOffer(currentBest.offer);
+
+                    c=ch;
+                    shouldReceive = ((ChooseFrom)getContentManager().extractContent(currentBest.response)).getWillSell();
+
+                    getContentManager().fillContent(acc, ch);
+                    acceptances.add(acc);
 
                 }
-
+                } catch (Codec.CodecException e) {
+                    e.printStackTrace();
+                } catch (OntologyException e) {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -420,32 +462,19 @@ TO DO
                             throw new RefuseException("");
                     }
 /*
-TO DO
-TO DO
-TO DO
+    jednoducho integrovany proposeSale, ktory ale treba hodne este premysliet
+
+    proposeSale by mal dostat zoznam knih o ktore je zaujem a vyrobit zoznam offier na ne
+
+    podla vsetketho si mozme vybrat na ktore knihy z cfp urobime offer, sellBooks je zoznam vsetkych knih ktore sme z cfp schopni predat
  */
-                    //create two offers
-                    Offer o1 = new Offer();
-                    o1.setMoney(100);
-
-                    ArrayList<BookInfo> bis = new ArrayList<BookInfo>();
-                    bis.add(myGoal.get(rnd.nextInt(myGoal.size())).getBook());
-
-                    Offer o2 = new Offer();
-                    o2.setBooks(bis);
-                    o2.setMoney(20);
-
-                    ArrayList<Offer> offers = new ArrayList<Offer>();
-                    offers.add(o1);
-                    offers.add(o2);
+                    ArrayList<Offer> proposedSale = logic.proposeSale(sellBooks);
 
                     ChooseFrom cf = new ChooseFrom();
 
                     cf.setWillSell(sellBooks);
-                    cf.setOffers(offers);
-                    /*
+                    cf.setOffers(proposedSale);
 
-                     */
                     //send the offers
                     ACLMessage reply = cfp.createReply();
                     reply.setPerformative(ACLMessage.PROPOSE);
@@ -509,6 +538,18 @@ TO DO
                     getContentManager().fillContent(transReq, new Action(envs[0].getName(), mt));
 
                     addBehaviour(new SendBook(myAgent, transReq));
+
+                    ArrayList<BookTraderLogic.BookPriceTuple> soldBooks = new ArrayList<>();
+                    ArrayList<BookTraderLogic.BookPriceTuple> receivedBooks = new ArrayList<>();
+                    for (BookInfo b : c.getOffer().getBooks())
+                    {
+                        receivedBooks.add(logic.new BookPriceTuple(b,c.getOffer().getMoney()));
+                    }
+                    for (BookInfo b : cf.getWillSell())
+                    {
+                        soldBooks.add(logic.new BookPriceTuple(b,0));
+                    }
+                    logic.registerTrade(soldBooks,receivedBooks);
 
                     ACLMessage reply = accept.createReply();
                     reply.setPerformative(ACLMessage.INFORM);
