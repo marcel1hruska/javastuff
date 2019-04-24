@@ -30,6 +30,7 @@ public class BookTraderLogic {
     HashMap<BookInfo, Double> saleEma = new HashMap<>();
     HashMap<BookInfo, Double> goals = new HashMap<>();
     ArrayList<BookInfo> books = new ArrayList<>();
+    HashSet<BookInfo> nonGoalBooks = new HashSet<>();
 
     private class PriceTimestamp {
         double price;
@@ -224,6 +225,15 @@ public class BookTraderLogic {
     void updateLogic() {
         money = agent.myMoney;
         books = agent.myBooks;
+
+        nonGoalBooks.clear();
+        HashSet<BookInfo> goals = new HashSet<>(this.goals.keySet());
+        for(BookInfo b : books){
+            if(goals.contains(b))
+                goals.remove(b);
+            else
+                nonGoalBooks.add(b);
+        }
     }
 
 
@@ -240,7 +250,7 @@ public class BookTraderLogic {
      * @return utility
      */
     private double estimateBookUtility(BookInfo id, Mode mode) {
-        if (goals.containsKey(id))
+        if (goals.containsKey(id) && !nonGoalBooks.contains(id))
             return goals.get(id);
 
         if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS)

@@ -1,4 +1,4 @@
-
+bin/
 .idea/
 .gradle/
 APDescription.txt
@@ -6,3 +6,6 @@ MTPs-Main-Container.txt
 build/
 out/
 javastuff.iml
+.classpath
+.project
+.settings/
