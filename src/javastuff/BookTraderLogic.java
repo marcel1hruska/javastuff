@@ -8,6 +8,49 @@ import javastuff.onto.Offer;
 import java.util.*;
 
 public class BookTraderLogic {
+    public class MBookInfo {
+
+        private String bookName;
+        private int bookID;
+
+        MBookInfo(String bookName, int bookID)
+        {
+            this.bookName = bookName;
+            this.bookID = bookID;
+        }
+        MBookInfo(BookInfo book)
+        {
+            this.bookName = book.getBookName();
+            this.bookID = book.getBookID();
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((bookName == null) ? 0 : bookName.hashCode());
+            result = prime * result + bookID;
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            MBookInfo other = (MBookInfo) obj;
+            if (bookName == null) {
+                if (other.bookName != null)
+                    return false;
+            } else if (!bookName.equals(other.bookName))
+                return false;
+            return bookID == other.bookID;
+        }
+    }
+
     public final long USE_AVERAGES_AFTER = 10000;//in ms
     public final long STOP_TRADING_NONGOAL_BOOKS = 15000;//in ms
     public final long TRADING_DURATION = 18000;//in ms
@@ -23,14 +66,14 @@ public class BookTraderLogic {
     /**
      * Purchase proposals we get / exponential moving average
      */
-    HashMap<BookInfo, Double> purchaseEma = new HashMap<>();
+    HashMap<MBookInfo, Double> purchaseEma = new HashMap<>();
     /**
      * Sale proposals / exponential moving average
      */
-    HashMap<BookInfo, Double> saleEma = new HashMap<>();
-    HashMap<BookInfo, Double> goals = new HashMap<>();
-    ArrayList<BookInfo> books = new ArrayList<>();
-    HashSet<BookInfo> nonGoalBooks = new HashSet<>();
+    HashMap<MBookInfo, Double> saleEma = new HashMap<>();
+    HashMap<MBookInfo, Double> goals = new HashMap<>();
+    ArrayList<MBookInfo> books = new ArrayList<>();
+    HashSet<MBookInfo> nonGoalBooks = new HashSet<>();
 
     private class PriceTimestamp {
         double price;
@@ -76,10 +119,10 @@ public class BookTraderLogic {
         money = agent.myMoney;
 
         for (Goal g : agent.myGoal)
-            goals.put(g.getBook(), g.getValue());
+            goals.put(new MBookInfo(g.getBook()), g.getValue());
 
         for (BookInfo b : agent.myBooks)
-            books.add(b);
+            books.add(new MBookInfo(b));
 
         minBookPrice = goals.values().stream().min(Double::compareTo).get();
         maxBookPrice = goals.values().stream().max(Double::compareTo).get();
@@ -98,7 +141,7 @@ public class BookTraderLogic {
         double p = 0;
         for (BookInfo b :
                 o.getBooks()) {
-            p += estimateBookUtility(b, type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESSIMISTIC);
+            p += estimateBookUtility(new MBookInfo(b), type == OfferType.SALE ? Mode.OPTIMISTIC : Mode.PESSIMISTIC);
         }
         if (type == OfferType.PURCHASE)
             return p * (1 - MARGIN);
@@ -111,33 +154,47 @@ public class BookTraderLogic {
      *
      * @return
      */
-/*
-    tato funkcia ma vyrabat tuple knih, ktore chceme, ceny su nam predpokladam naprd
- */
+
     private int proposedIndex = 0;
 
     public ArrayList<BookInfo> proposePurchase() {
         ArrayList<BookInfo> proposal = new ArrayList<>();
+        boolean twoBooks = Math.random() < 0.5;
+        boolean nonGoal = Math.random() < 0.5;
 
-        /*
-        if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS)
-            for (BookInfo b : saleEma.keySet()) {
+        if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS && twoBooks && nonGoal)
+            for (MBookInfo b : saleEma.keySet()) {
                 double p = saleEma.get(b) * (1 - MARGIN);
                 if (purchaseEma.containsKey(b))
-                    p = Math.min(p, purchaseEma.get(b));
-                proposal.add(new BookPriceTuple(b, p));
+                {
+                    //we should somehow decide to choose the best nongoal book for us, is it okay?
+                    if (purchaseEma.get(b) < p)
+                    {
+                        BookInfo book = new BookInfo();
+                        book.setBookName(b.bookName);
+                        book.setBookID(0);
+                        proposal.add(book);
+                    }
+                }
+                //p = Math.min(p, purchaseEma.get(b));
             }
-        */
+
         if (proposedIndex >= goals.keySet().size())
             proposedIndex = 0;
         int i = 0;
-        for (BookInfo b : goals.keySet()) {
+        for (MBookInfo b : goals.keySet()) {
             //proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
             if (i == proposedIndex)
             {
-                proposal.add(b);
+                BookInfo book = new BookInfo();
+                book.setBookName(b.bookName);
+                book.setBookID(0);
+                proposal.add(book);
                 proposedIndex++;
-                break;
+                if (!nonGoal && twoBooks)
+                    twoBooks = false;
+                else
+                    break;
             }
             i++;
         }
@@ -162,11 +219,11 @@ public class BookTraderLogic {
         {
             for (BookInfo p :
                     heWants.getBooks()) {
-                double price = estimateBookUtility(p, Mode.OPTIMISTIC);
+                double price = estimateBookUtility(new MBookInfo(p), Mode.OPTIMISTIC);
                 hisVal += price;
                 if (saleEma.containsKey(p))
                     price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
-                saleEma.put(p, price);
+                saleEma.put(new MBookInfo(p), price);
             }
         }
 
@@ -175,11 +232,11 @@ public class BookTraderLogic {
         {
             for (BookInfo p :
                     weWant.getBooks()) {
-                double price = estimateBookUtility(p, Mode.PESSIMISTIC);
+                double price = estimateBookUtility(new MBookInfo(p), Mode.PESSIMISTIC);
                 ourVal += price;
                 if (purchaseEma.containsKey(p))
                     price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
-                purchaseEma.put(p, price);
+                purchaseEma.put(new MBookInfo(p), price);
             }
         }
 
@@ -198,6 +255,7 @@ public class BookTraderLogic {
         Offer o = new Offer();
         o.setBooks(wanted);
         o.setMoney(computeOfferValue(o, OfferType.SALE));
+        System.out.println("sell value " + computeOfferValue(o, OfferType.SALE));
         o.setBooks(new ArrayList<>());
         offers.add(o);
 
@@ -206,12 +264,15 @@ public class BookTraderLogic {
         o.setBooks(wanted);
         double p = computeOfferValue(o, OfferType.SALE);
         ArrayList<BookInfo> bs = new ArrayList<>();
-        for (BookInfo b : saleEma.keySet()) {
+        for (MBookInfo b : saleEma.keySet()) {
             if (p < 0)
                 break;
             if (Math.random() < 0.5)
                 continue;
-            bs.add(b);
+            BookInfo book = new BookInfo();
+            book.setBookName(b.bookName);
+            book.setBookID(b.bookID);
+            bs.add(book);
             p -= estimateBookUtility(b, Mode.PESSIMISTIC);
         }
         o.setBooks(bs);
@@ -219,16 +280,20 @@ public class BookTraderLogic {
             o.setMoney(p);
         offers.add(o);
 
+        //treba dorobit len za knihy
+
         return offers;
     }
 
     void updateLogic() {
+        books.clear();
+        for (BookInfo b : agent.myBooks)
+            books.add(new MBookInfo(b));
         money = agent.myMoney;
-        books = agent.myBooks;
 
         nonGoalBooks.clear();
-        HashSet<BookInfo> goals = new HashSet<>(this.goals.keySet());
-        for(BookInfo b : books){
+        HashSet<MBookInfo> goals = new HashSet<>(this.goals.keySet());
+        for(MBookInfo b : books){
             if(goals.contains(b))
                 goals.remove(b);
             else
@@ -249,12 +314,15 @@ public class BookTraderLogic {
      * @param mode
      * @return utility
      */
-    private double estimateBookUtility(BookInfo id, Mode mode) {
+    private double estimateBookUtility(MBookInfo id, Mode mode) {
         if (goals.containsKey(id) && !nonGoalBooks.contains(id))
             return goals.get(id);
 
+        /*
+        wtf
         if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS)
             return 0;
+        */
 
         if ((System.currentTimeMillis() - time) > USE_AVERAGES_AFTER) {
             if (saleEma.containsKey(id))
