@@ -13,13 +13,12 @@ public class BookTraderLogic {
         private String bookName;
         private int bookID;
 
-        MBookInfo(String bookName, int bookID)
-        {
+        MBookInfo(String bookName, int bookID) {
             this.bookName = bookName;
             this.bookID = bookID;
         }
-        MBookInfo(BookInfo book)
-        {
+
+        MBookInfo(BookInfo book) {
             this.bookName = book.getBookName();
             this.bookID = book.getBookID();
         }
@@ -63,14 +62,9 @@ public class BookTraderLogic {
     double minBookPrice;
     double maxBookPrice;
     double money;
-    /**
-     * Purchase proposals we get / exponential moving average
-     */
-    HashMap<MBookInfo, Double> purchaseEma = new HashMap<>();
-    /**
-     * Sale proposals / exponential moving average
-     */
-    HashMap<MBookInfo, Double> saleEma = new HashMap<>();
+
+
+    HashMap<MBookInfo, Double> priceEma = new HashMap<>();
     HashMap<MBookInfo, Double> goals = new HashMap<>();
     ArrayList<MBookInfo> books = new ArrayList<>();
     HashSet<MBookInfo> nonGoalBooks = new HashSet<>();
@@ -163,20 +157,18 @@ public class BookTraderLogic {
         boolean nonGoal = Math.random() < 0.5;
 
         if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS && twoBooks && nonGoal)
-            for (MBookInfo b : saleEma.keySet()) {
-                double p = saleEma.get(b) * (1 - MARGIN);
-                if (purchaseEma.containsKey(b))
-                {
+            for (MBookInfo b : priceEma.keySet()) {
+                double p = priceEma.get(b) * (1 - MARGIN);
+                if (priceEma.containsKey(b)) {
                     //we should somehow decide to choose the best nongoal book for us, is it okay?
-                    if (purchaseEma.get(b) < p)
-                    {
+                    if (priceEma.get(b) < p) {
                         BookInfo book = new BookInfo();
                         book.setBookName(b.bookName);
                         book.setBookID(0);
                         proposal.add(book);
                     }
                 }
-                //p = Math.min(p, purchaseEma.get(b));
+                //p = Math.min(p, priceEma.get(b));
             }
 
         if (proposedIndex >= goals.keySet().size())
@@ -184,8 +176,7 @@ public class BookTraderLogic {
         int i = 0;
         for (MBookInfo b : goals.keySet()) {
             //proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
-            if (i == proposedIndex)
-            {
+            if (i == proposedIndex) {
                 BookInfo book = new BookInfo();
                 book.setBookName(b.bookName);
                 book.setBookID(0);
@@ -215,28 +206,26 @@ public class BookTraderLogic {
     public double acceptTrade(Offer heWants, Offer weWant) {
         double hisVal = heWants.getMoney();
         //register proposal, compute averages
-        if (heWants.getBooks() != null)
-        {
+        if (heWants.getBooks() != null) {
             for (BookInfo p :
                     heWants.getBooks()) {
                 double price = estimateBookUtility(new MBookInfo(p), Mode.OPTIMISTIC);
                 hisVal += price;
-                if (saleEma.containsKey(p))
-                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * saleEma.get(p);
-                saleEma.put(new MBookInfo(p), price);
+                if (priceEma.containsKey(p))
+                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * priceEma.get(p);
+                priceEma.put(new MBookInfo(p), price);
             }
         }
 
         double ourVal = weWant.getMoney();
-        if (weWant.getBooks() != null)
-        {
+        if (weWant.getBooks() != null) {
             for (BookInfo p :
                     weWant.getBooks()) {
                 double price = estimateBookUtility(new MBookInfo(p), Mode.PESSIMISTIC);
                 ourVal += price;
-                if (purchaseEma.containsKey(p))
-                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * purchaseEma.get(p);
-                purchaseEma.put(new MBookInfo(p), price);
+                if (priceEma.containsKey(p))
+                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * priceEma.get(p);
+                priceEma.put(new MBookInfo(p), price);
             }
         }
 
@@ -264,7 +253,7 @@ public class BookTraderLogic {
         o.setBooks(wanted);
         double p = computeOfferValue(o, OfferType.SALE);
         ArrayList<BookInfo> bs = new ArrayList<>();
-        for (MBookInfo b : saleEma.keySet()) {
+        for (MBookInfo b : priceEma.keySet()) {
             if (p < 0)
                 break;
             if (Math.random() < 0.5)
@@ -293,8 +282,8 @@ public class BookTraderLogic {
 
         nonGoalBooks.clear();
         HashSet<MBookInfo> goals = new HashSet<>(this.goals.keySet());
-        for(MBookInfo b : books){
-            if(goals.contains(b))
+        for (MBookInfo b : books) {
+            if (goals.contains(b))
                 goals.remove(b);
             else
                 nonGoalBooks.add(b);
@@ -318,19 +307,21 @@ public class BookTraderLogic {
         if (goals.containsKey(id) && !nonGoalBooks.contains(id))
             return goals.get(id);
 
-        /*
-        wtf
-        if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS)
-            return 0;
-        */
+        double value = 0;
 
         if ((System.currentTimeMillis() - time) > USE_AVERAGES_AFTER) {
-            if (saleEma.containsKey(id))
-                return saleEma.get(id);
+            if (priceEma.containsKey(id))
+                value = priceEma.get(id);
             else
-                return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
+                value = mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
         } else
-            return mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
+            value = mode == Mode.PESSIMISTIC ? minBookPrice : maxBookPrice;
+
+        //nongoal book discount befor trading end
+        if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS && !goals.containsKey(id))
+            return (TRADING_DURATION - (System.currentTimeMillis() - time)) * value / (TRADING_DURATION - STOP_TRADING_NONGOAL_BOOKS);
+
+        return value;
     }
 
 }
