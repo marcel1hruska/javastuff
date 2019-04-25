@@ -51,8 +51,8 @@ public class BookTraderLogic {
     }
 
     public final long USE_AVERAGES_AFTER = 10000;//in ms
-    public final long STOP_TRADING_NONGOAL_BOOKS = 15000;//in ms
-    public final long TRADING_DURATION = 18000;//in ms
+    public final long STOP_TRADING_NONGOAL_BOOKS = 150000;//in ms
+    public final long TRADING_DURATION = 180000;//in ms
     public final double MARGIN = 0.1;
     public final double SMOOTHING_FACTOR = 0.5;
 
@@ -244,7 +244,6 @@ public class BookTraderLogic {
         Offer o = new Offer();
         o.setBooks(wanted);
         o.setMoney(computeOfferValue(o, OfferType.SALE));
-        System.out.println("sell value " + computeOfferValue(o, OfferType.SALE));
         o.setBooks(new ArrayList<>());
         offers.add(o);
 
@@ -256,7 +255,7 @@ public class BookTraderLogic {
         for (MBookInfo b : priceEma.keySet()) {
             if (p < 0)
                 break;
-            if (Math.random() < 0.5)
+            if (Math.random() < 0.5 || wanted.stream().anyMatch(x -> x.getBookName().equals(b.bookName)))
                 continue;
             BookInfo book = new BookInfo();
             book.setBookName(b.bookName);
@@ -268,8 +267,6 @@ public class BookTraderLogic {
         if (p > 0)
             o.setMoney(p);
         offers.add(o);
-
-        //treba dorobit len za knihy
 
         return offers;
     }
@@ -319,7 +316,9 @@ public class BookTraderLogic {
 
         //nongoal book discount befor trading end
         if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS && !goals.containsKey(id))
+        {
             return (TRADING_DURATION - (System.currentTimeMillis() - time)) * value / (TRADING_DURATION - STOP_TRADING_NONGOAL_BOOKS);
+        }
 
         return value;
     }
