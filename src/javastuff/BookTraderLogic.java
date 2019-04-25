@@ -13,11 +13,6 @@ public class BookTraderLogic {
         private String bookName;
         private int bookID;
 
-        MBookInfo(String bookName, int bookID) {
-            this.bookName = bookName;
-            this.bookID = bookID;
-        }
-
         MBookInfo(BookInfo book) {
             this.bookName = book.getBookName();
             this.bookID = book.getBookID();
@@ -65,31 +60,16 @@ public class BookTraderLogic {
     double money;
 
 
+    //exponential moving average
     HashMap<MBookInfo, Double> priceEma = new HashMap<>();
+    //our goals
     HashMap<MBookInfo, Double> goals = new HashMap<>();
+    //our books
     ArrayList<MBookInfo> books = new ArrayList<>();
+    //our non goal books
     HashSet<MBookInfo> nonGoalBooks = new HashSet<>();
 
-    private class PriceTimestamp {
-        double price;
-        long time;
-
-        public PriceTimestamp(long time, double price) {
-            this.price = price;
-            this.time = time;
-        }
-    }
-
-    public class BookPriceTuple {
-        public BookInfo book;
-        public double price;
-
-        public BookPriceTuple(BookInfo book, double price) {
-            this.book = book;
-            this.price = price;
-        }
-    }
-
+    //offer with its value and matching response
     public class OfferInfo {
         public Offer offer;
         public double value;
@@ -132,7 +112,6 @@ public class BookTraderLogic {
 
     /**
      * Computes value of an offer
-     * Do not forget to add price in his offer!!!
      */
     private double computeOfferValue(Offer o, OfferType type) {
         double p = 0;
@@ -240,6 +219,7 @@ public class BookTraderLogic {
         Offer o = new Offer();
         o.setBooks(wanted);
         o.setMoney(computeOfferValue(o, OfferType.SALE));
+        System.out.println("sell value " + computeOfferValue(o, OfferType.SALE));
         o.setBooks(new ArrayList<>());
         offers.add(o);
 

@@ -30,6 +30,7 @@ import java.util.*;
  * does not sell bosks it does not own (but it can still happed from time to time if two agents asks for the same book
  * at the same time).
  *
+ * Added logic to the trader
  */
 public class BookTrader extends Agent {
 
@@ -133,8 +134,8 @@ public class BookTrader extends Agent {
                     //start the logic
                     logic.startTrading();
 
-                    //add a behavior which tries to buy a book every two seconds
-                    addBehaviour(new TradingBehaviour(myAgent, 2000));
+                    //add a behavior which tries to buy a book every 50ms
+                    addBehaviour(new TradingBehaviour(myAgent, 50));
 
                     //add a behavior which sells book to other agents
                     addBehaviour(new SellBook(myAgent, MessageTemplate.MatchPerformative(ACLMessage.CFP)));
@@ -183,15 +184,13 @@ public class BookTrader extends Agent {
                     ACLMessage buyBook = new ACLMessage(ACLMessage.CFP);
                     buyBook.setLanguage(codec.getName());
                     buyBook.setOntology(onto.getName());
-                    buyBook.setReplyByDate(new Date(System.currentTimeMillis()+5000));
+                    buyBook.setReplyByDate(new Date(System.currentTimeMillis()+1000));
 
                     for (DFAgentDescription dfad : traders) {
                         if (dfad.getName().equals(myAgent.getAID()))
                             continue;
                         buyBook.addReceiver(dfad.getName());
                     }
-
-                    ArrayList<BookInfo> bis = new ArrayList<BookInfo>();
 
                     //create proposals
                     ArrayList<BookInfo> proposedBooks = logic.proposePurchase();
@@ -258,7 +257,7 @@ public class BookTrader extends Agent {
                     transReq.addReceiver(envs[0].getName());
                     transReq.setLanguage(codec.getName());
                     transReq.setOntology(onto.getName());
-                    transReq.setReplyByDate(new Date(System.currentTimeMillis() + 5000));
+                    transReq.setReplyByDate(new Date(System.currentTimeMillis() + 1000));
 
                     getContentManager().fillContent(transReq, new Action(envs[0].getName(), mt));
                     addBehaviour(new SendBook(myAgent, transReq));
@@ -444,6 +443,7 @@ public class BookTrader extends Agent {
                             throw new RefuseException("");
                     }
 
+                    //propose books to sell
                     ArrayList<Offer> proposedSale = logic.proposeSale(sellBooks);
 
                     ChooseFrom cf = new ChooseFrom();
@@ -454,7 +454,7 @@ public class BookTrader extends Agent {
                     //send the offers
                     ACLMessage reply = cfp.createReply();
                     reply.setPerformative(ACLMessage.PROPOSE);
-                    reply.setReplyByDate(new Date(System.currentTimeMillis() + 5000));
+                    reply.setReplyByDate(new Date(System.currentTimeMillis() + 1000));
                     getContentManager().fillContent(reply, cf);
 
                     return reply;
@@ -509,7 +509,7 @@ public class BookTrader extends Agent {
                     transReq.addReceiver(envs[0].getName());
                     transReq.setLanguage(codec.getName());
                     transReq.setOntology(onto.getName());
-                    transReq.setReplyByDate(new Date(System.currentTimeMillis() + 5000));
+                    transReq.setReplyByDate(new Date(System.currentTimeMillis() + 1000));
 
                     getContentManager().fillContent(transReq, new Action(envs[0].getName(), mt));
 
