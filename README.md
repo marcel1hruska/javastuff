@@ -1,5 +1,5 @@
 # Jade Trading Bot
 
-WIP
+Our code consists of BookTraderLogic class and its integration in BookTrader.
 
-Most of the code copied from Martin Pilat
+The rest is copied from Martin Pilat.
