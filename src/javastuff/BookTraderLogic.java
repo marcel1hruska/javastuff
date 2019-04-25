@@ -147,10 +147,10 @@ public class BookTraderLogic {
             if (proposedIndex + 1 >= priceEma.size())
                 proposedIndex = 0;
 
-            if (i++ < proposedIndex)
+            if (i++ < proposedIndex || (!goals.containsKey(b) && Math.random() < 0.5))
                 continue;
             else
-                proposedIndex = i;
+                proposedIndex = (int)(i + Math.random() * priceEma.size()) % priceEma.size();
 
             if (proposalSize == 0)
                 break;
@@ -228,7 +228,7 @@ public class BookTraderLogic {
         o.setBooks(wanted);
         double p = computeOfferValue(o, OfferType.SALE);
         ArrayList<BookInfo> bs = new ArrayList<>();
-        for (MBookInfo b : priceEma.keySet()) {
+        for (MBookInfo b : books) {
             if (p < 0)
                 break;
             if (Math.random() < 0.3 || wanted.stream().anyMatch(x -> x.getBookName().equals(b.bookName)))
