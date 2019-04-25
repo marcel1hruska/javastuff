@@ -28,7 +28,7 @@ public class BookTraderLogic {
             final int prime = 31;
             int result = 1;
             result = prime * result + ((bookName == null) ? 0 : bookName.hashCode());
-            result = prime * result + bookID;
+            result = prime * result;
             return result;
         }
 
@@ -46,13 +46,14 @@ public class BookTraderLogic {
                     return false;
             } else if (!bookName.equals(other.bookName))
                 return false;
-            return bookID == other.bookID;
+            return true;
         }
     }
 
     public final long USE_AVERAGES_AFTER = 10000;//in ms
     public final long STOP_TRADING_NONGOAL_BOOKS = 15000;//in ms
     public final long TRADING_DURATION = 18000;//in ms
+    public final double INCREASE_PROPOSAL_SIZE_PROB = 0.4;
     public final double MARGIN = 0.1;
     public final double SMOOTHING_FACTOR = 0.5;
 
@@ -112,8 +113,10 @@ public class BookTraderLogic {
         books.clear();
         money = agent.myMoney;
 
-        for (Goal g : agent.myGoal)
+        for (Goal g : agent.myGoal) {
             goals.put(new MBookInfo(g.getBook()), g.getValue());
+            priceEma.put(new MBookInfo(g.getBook()), g.getValue());
+        }
 
         for (BookInfo b : agent.myBooks)
             books.add(new MBookInfo(b));
@@ -153,41 +156,34 @@ public class BookTraderLogic {
 
     public ArrayList<BookInfo> proposePurchase() {
         ArrayList<BookInfo> proposal = new ArrayList<>();
-        boolean twoBooks = Math.random() < 0.5;
-        boolean nonGoal = Math.random() < 0.5;
 
-        if ((System.currentTimeMillis() - time) < STOP_TRADING_NONGOAL_BOOKS && twoBooks && nonGoal)
-            for (MBookInfo b : priceEma.keySet()) {
-                double p = priceEma.get(b) * (1 - MARGIN);
-                if (priceEma.containsKey(b)) {
-                    //we should somehow decide to choose the best nongoal book for us, is it okay?
-                    if (priceEma.get(b) < p) {
-                        BookInfo book = new BookInfo();
-                        book.setBookName(b.bookName);
-                        book.setBookID(0);
-                        proposal.add(book);
-                    }
-                }
-                //p = Math.min(p, priceEma.get(b));
-            }
+        int proposalSize = 1;
 
-        if (proposedIndex >= goals.keySet().size())
-            proposedIndex = 0;
+        for (; proposalSize + 1 < priceEma.size(); ++proposalSize)
+            if (Math.random() > INCREASE_PROPOSAL_SIZE_PROB)
+                break;
+
         int i = 0;
-        for (MBookInfo b : goals.keySet()) {
-            //proposal.add(new BookPriceTuple(b, goals.get(b) * (1 - MARGIN)));
-            if (i == proposedIndex) {
-                BookInfo book = new BookInfo();
-                book.setBookName(b.bookName);
-                book.setBookID(0);
-                proposal.add(book);
-                proposedIndex++;
-                if (!nonGoal && twoBooks)
-                    twoBooks = false;
-                else
-                    break;
-            }
-            i++;
+        for (MBookInfo b : priceEma.keySet()) {
+            if (proposedIndex + 1 >= priceEma.size())
+                proposedIndex = 0;
+
+            if (i++ < proposedIndex)
+                continue;
+            else
+                proposedIndex = i;
+
+            if (proposalSize == 0)
+                break;
+
+            if (System.currentTimeMillis() - time > STOP_TRADING_NONGOAL_BOOKS && !goals.containsKey(b))
+                continue;
+
+            BookInfo info = new BookInfo();
+            info.setBookID(b.bookID);
+            info.setBookName(b.bookName);
+            proposal.add(info);
+            --proposalSize;
         }
 
         return proposal;
