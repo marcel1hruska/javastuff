@@ -51,8 +51,8 @@ public class BookTraderLogic {
     }
 
     public final long USE_AVERAGES_AFTER = 10000;//in ms
-    public final long STOP_TRADING_NONGOAL_BOOKS = 15000;//in ms
-    public final long TRADING_DURATION = 18000;//in ms
+    public final long STOP_TRADING_NONGOAL_BOOKS = 150000;//in ms
+    public final long TRADING_DURATION = 180000;//in ms
     public final double INCREASE_PROPOSAL_SIZE_PROB = 0.4;
     public final double MARGIN = 0.1;
     public final double SMOOTHING_FACTOR = 0.5;
@@ -315,7 +315,9 @@ public class BookTraderLogic {
 
         //nongoal book discount befor trading end
         if ((System.currentTimeMillis() - time) > STOP_TRADING_NONGOAL_BOOKS && !goals.containsKey(id))
-            return (TRADING_DURATION - (System.currentTimeMillis() - time)) * value / (TRADING_DURATION - STOP_TRADING_NONGOAL_BOOKS);
+            return Math.max(
+                    (TRADING_DURATION - (System.currentTimeMillis() - time)) * value / (TRADING_DURATION - STOP_TRADING_NONGOAL_BOOKS),
+                    minBookPrice * 0.1);
 
         return value;
     }
