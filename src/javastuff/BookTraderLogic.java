@@ -50,7 +50,7 @@ public class BookTraderLogic {
     public final long TRADING_DURATION = 180000;//in ms
     public final double INCREASE_PROPOSAL_SIZE_PROB = 0.4;
     public final double MARGIN = 0.1;
-    public final double SMOOTHING_FACTOR = 0.5;
+    public final double SMOOTHING_FACTOR = 0.35;
 
     long time = 0;
     BookTrader agent;
@@ -180,15 +180,13 @@ public class BookTraderLogic {
      */
     public double acceptTrade(Offer heWants, Offer weWant) {
         double hisVal = heWants.getMoney();
+        double price = 0;
         //register proposal, compute averages
         if (heWants.getBooks() != null) {
             for (BookInfo p :
                     heWants.getBooks()) {
-                double price = estimateBookUtility(new MBookInfo(p), Mode.OPTIMISTIC);
+                price = estimateBookUtility(new MBookInfo(p), Mode.OPTIMISTIC);
                 hisVal += price;
-                if (priceEma.containsKey(p))
-                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * priceEma.get(p);
-                priceEma.put(new MBookInfo(p), price);
             }
         }
 
@@ -196,14 +194,28 @@ public class BookTraderLogic {
         if (weWant.getBooks() != null) {
             for (BookInfo p :
                     weWant.getBooks()) {
-                double price = estimateBookUtility(new MBookInfo(p), Mode.PESSIMISTIC);
+                price = estimateBookUtility(new MBookInfo(p), Mode.PESSIMISTIC);
                 ourVal += price;
-                if (priceEma.containsKey(p))
-                    price = SMOOTHING_FACTOR * price + (1 - SMOOTHING_FACTOR) * priceEma.get(p);
-                priceEma.put(new MBookInfo(p), price);
             }
         }
 
+        double sumMarket = hisVal + ourVal;
+        double sumEstimate = 0;
+        ArrayList<BookInfo> union = new ArrayList<>();
+        if (heWants.getBooks() != null)
+            union.addAll(heWants.getBooks());
+        if (weWant.getBooks() != null)
+            union.addAll(weWant.getBooks());
+        for (BookInfo b : union) {
+            sumEstimate += estimateBookUtility(new MBookInfo(b), Mode.OPTIMISTIC);
+        }
+        for (BookInfo b : union) {
+            double newVal = sumMarket * estimateBookUtility(new MBookInfo(b), Mode.OPTIMISTIC) / sumEstimate;
+            if (priceEma.containsKey(new MBookInfo(b)))
+                price = SMOOTHING_FACTOR * newVal + (1 - SMOOTHING_FACTOR) * priceEma.get(new MBookInfo(b));
+            price = Math.max(price, minBookPrice * 0.1);
+            priceEma.put(new MBookInfo(b), price*(1-MARGIN));
+        }
         return ourVal / hisVal;
     }
 
@@ -219,7 +231,6 @@ public class BookTraderLogic {
         Offer o = new Offer();
         o.setBooks(wanted);
         o.setMoney(computeOfferValue(o, OfferType.SALE));
-        System.out.println("sell value " + computeOfferValue(o, OfferType.SALE));
         o.setBooks(new ArrayList<>());
         offers.add(o);
 

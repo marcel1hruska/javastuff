@@ -335,7 +335,7 @@ public class BookTrader extends Agent {
                             //compute offers value
                             double value = logic.acceptTrade(o,weWant);
                             //we can fulfill either way but we dont want to
-                            if (value >= 0)
+                            if (value >= 1)
                                 canFulfill.add(logic.new OfferInfo(o,value,response));
                         }
                     }
