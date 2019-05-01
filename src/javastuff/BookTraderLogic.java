@@ -214,7 +214,7 @@ public class BookTraderLogic {
             if (priceEma.containsKey(new MBookInfo(b)))
                 price = SMOOTHING_FACTOR * newVal + (1 - SMOOTHING_FACTOR) * priceEma.get(new MBookInfo(b));
             price = Math.max(price, minBookPrice * 0.1);
-            priceEma.put(new MBookInfo(b), price*(1-MARGIN));
+            priceEma.put(new MBookInfo(b), price);
         }
         return ourVal / hisVal;
     }
